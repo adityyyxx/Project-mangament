@@ -1,19 +1,20 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, Plus, Trash2 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { setCurrentWorkspace, deleteWorkspaceAsync, fetchWorkspaces } from "../features/workspaceSlice";
+import { setCurrentWorkspace, deleteWorkspaceAsync } from "../features/workspaceSlice";
 import { useNavigate } from "react-router-dom";
-import { useClerk, useOrganizationList, useAuth } from "@clerk/clerk-react";
+import { useOrganizationList, useAuth } from "@clerk/clerk-react";
+import CreateWorkspaceDialog from "./CreateWorkspaceDialog";
 
 function WorkspaceDropdown() {
 
     const { setActive, userMemberships, isLoaded } = useOrganizationList({ userMemberships: true });
-    const { openCreateOrganization } = useClerk();
     const { getToken } = useAuth();
 
     const { workspaces } = useSelector((state) => state.workspace);
     const currentWorkspace = useSelector((state) => state.workspace?.currentWorkspace || null);
     const [isOpen, setIsOpen] = useState(false);
+    const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
     const dropdownRef = useRef(null);
 
     const dispatch = useDispatch();
@@ -54,12 +55,6 @@ function WorkspaceDropdown() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // Sync workspaces when Clerk organization list updates
-    useEffect(() => {
-        if (isLoaded && userMemberships?.data) {
-            dispatch(fetchWorkspaces({ getToken }));
-        }
-    }, [userMemberships?.data?.length, isLoaded]);
 
     useEffect(() => {
         if (currentWorkspace && isLoaded && setActive) {
@@ -124,13 +119,18 @@ function WorkspaceDropdown() {
 
                     <hr className="border-gray-200 dark:border-zinc-700" />
 
-                    <div onClick={() => { openCreateOrganization(); setIsOpen(false); }} className="p-2 cursor-pointer rounded group hover:bg-gray-100 dark:hover:bg-zinc-800" >
+                    <div onClick={() => { setIsCreateWorkspaceOpen(true); setIsOpen(false); }} className="p-2 cursor-pointer rounded group hover:bg-gray-100 dark:hover:bg-zinc-800" >
                         <p className="flex items-center text-xs gap-2 my-1 w-full text-blue-600 dark:text-blue-400 group-hover:text-blue-500 dark:group-hover:text-blue-300">
                             <Plus className="w-4 h-4" /> Create Workspace
                         </p>
                     </div>
                 </div>
             )}
+
+            <CreateWorkspaceDialog
+                isDialogOpen={isCreateWorkspaceOpen}
+                setIsDialogOpen={setIsCreateWorkspaceOpen}
+            />
         </div>
     );
 }

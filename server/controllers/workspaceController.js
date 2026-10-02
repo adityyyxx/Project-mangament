@@ -227,7 +227,21 @@ export const createWorkspace = async (req, res) => {
             workspaceSlug = `${baseSlug}-${Date.now().toString().slice(-4)}`;
         }
 
-        const workspaceId = req.body.id || `ws_${Date.now()}`;
+        // Try to create organization in Clerk as well
+        let workspaceId = req.body.id;
+        if (!workspaceId) {
+            try {
+                const clerkOrg = await clerkClient.organizations.createOrganization({
+                    name: name.trim(),
+                    createdBy: userId,
+                    slug: workspaceSlug
+                });
+                workspaceId = clerkOrg.id;
+            } catch (clerkErr) {
+                console.log("Clerk org create notice (using local ID):", clerkErr.message);
+                workspaceId = `ws_${Date.now()}`;
+            }
+        }
 
         // Ensure user exists in database
         let user = await prisma.user.findUnique({ where: { id: userId } });

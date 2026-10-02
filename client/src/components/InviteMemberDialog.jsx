@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Mail, UserPlus } from "lucide-react";
 import toast from "react-hot-toast";
-import { useOrganization } from "@clerk/clerk-react";
+import { useOrganization, useOrganizationList } from "@clerk/clerk-react";
 import { useSelector } from "react-redux";
 
 const InviteMemberDialog = ({ isDialogOpen, setIsDialogOpen }) => {
-    const { organization } = useOrganization();
+    const { organization, isLoaded } = useOrganization();
+    const { setActive, userMemberships } = useOrganizationList({ userMemberships: true });
 
     const currentWorkspace = useSelector((state) => state.workspace?.currentWorkspace || null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -14,17 +15,28 @@ const InviteMemberDialog = ({ isDialogOpen, setIsDialogOpen }) => {
         role: "org:member",
     });
 
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        const activeOrg = organization || userMemberships?.data?.find(m => m.organization?.id === currentWorkspace?.id)?.organization;
+
+        if (!activeOrg) {
+            toast.error("This workspace is not linked to a Clerk organization. Please create or switch to a Clerk workspace.");
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
-            await organization.inviteMember({ emailAddress: formData.email, role: formData.role })
-            toast.success("Invitation sent successfully");
+            await activeOrg.inviteMember({ emailAddress: formData.email.trim(), role: formData.role });
+            toast.success("Invitation sent successfully! Ask the member to check their inbox & Spam folder.");
             setIsDialogOpen(false);
+            setFormData({ email: "", role: "org:member" });
         } catch (error) {
-            console.log(error);
-            toast.error(error.response?.data?.message || error.message);
+            console.error("Invite error:", error);
+            const errMsg = error.errors?.[0]?.message || error.response?.data?.message || error.message || "Failed to send invitation";
+            toast.error(errMsg);
         } finally {
             setIsSubmitting(false);
         }
