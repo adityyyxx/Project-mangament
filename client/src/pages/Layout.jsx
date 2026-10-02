@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import Sidebar from '../components/Sidebar'
 import { Outlet } from 'react-router-dom'
-import { CreateOrganization, SignIn, useAuth, useUser } from '@clerk/clerk-react'
+import { CreateOrganization, SignIn, useAuth, useUser, useOrganizationList } from '@clerk/clerk-react'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchWorkspaces } from '../features/workspaceSlice'
 import { loadTheme } from '../features/themeSlice'
@@ -11,6 +11,7 @@ import { Loader2Icon } from 'lucide-react'
 const Layout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const { user, isLoaded } = useUser()
+    const { userMemberships } = useOrganizationList({ userMemberships: true })
     const { workspaces, loading } = useSelector((state) => state.workspace)
     const { getToken } = useAuth()
     const dispatch = useDispatch()
@@ -20,12 +21,12 @@ const Layout = () => {
         dispatch(loadTheme())
     }, [])
 
-    // Initial load of workspaces
+    // Load workspaces on user load or when Clerk organizations change
     useEffect(() => {
-        if (isLoaded && user && workspaces.length === 0) {
+        if (isLoaded && user) {
             dispatch(fetchWorkspaces({ getToken }))
         }
-    }, [user, isLoaded])
+    }, [user, isLoaded, userMemberships?.data?.length])
 
     if (!user) {
         return (
@@ -44,7 +45,7 @@ const Layout = () => {
     if (user && workspaces.length === 0) {
         return (
             <div className="min-h-screen flex justify-center items-center">
-                <CreateOrganization />
+                <CreateOrganization afterCreateOrganizationUrl="/" skipInvitationScreen={true} />
             </div>
         )
     }

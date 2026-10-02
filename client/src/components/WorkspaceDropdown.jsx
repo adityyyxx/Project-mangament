@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, Plus, Trash2 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { setCurrentWorkspace, deleteWorkspaceAsync } from "../features/workspaceSlice";
+import { setCurrentWorkspace, deleteWorkspaceAsync, fetchWorkspaces } from "../features/workspaceSlice";
 import { useNavigate } from "react-router-dom";
 import { useClerk, useOrganizationList, useAuth } from "@clerk/clerk-react";
 
@@ -53,6 +53,13 @@ function WorkspaceDropdown() {
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    // Sync workspaces when Clerk organization list updates
+    useEffect(() => {
+        if (isLoaded && userMemberships?.data) {
+            dispatch(fetchWorkspaces({ getToken }));
+        }
+    }, [userMemberships?.data?.length, isLoaded]);
 
     useEffect(() => {
         if (currentWorkspace && isLoaded && setActive) {

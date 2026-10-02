@@ -47,19 +47,37 @@ const syncUserUpdation = inngest.createFunction({ id: "update-user-from-clerk" }
 // Inngest Function to save workspace data to a database
 const syncWorkspaceCreation = inngest.createFunction({ id: "sync-workspace-from-clerk" }, { event: "clerk/organization.created" }, async ({ event }) => {
     const { data } = event;
-    await prisma.workspace.create({
-        data: {
+    const baseSlug = (data.slug || data.name || "workspace")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || `ws-${data.id || Date.now()}`;
+
+    await prisma.workspace.upsert({
+        where: { id: data.id },
+        update: {
+            name: data.name,
+            image_url: data.image_url || "",
+        },
+        create: {
             id: data.id,
             name: data.name,
-            slug: data.slug,
+            slug: baseSlug,
             ownerId: data.created_by,
-            image_url: data.image_url,
+            image_url: data.image_url || "",
         },
     });
 
     // Add creator as ADMIN member
-    await prisma.workspaceMember.create({
-        data: {
+    await prisma.workspaceMember.upsert({
+        where: {
+            userId_workspaceId: {
+                userId: data.created_by,
+                workspaceId: data.id,
+            }
+        },
+        update: { role: "ADMIN" },
+        create: {
             userId: data.created_by,
             workspaceId: data.id,
             role: "ADMIN",
@@ -70,15 +88,18 @@ const syncWorkspaceCreation = inngest.createFunction({ id: "sync-workspace-from-
 // Inngest Function to update workspace data in database
 const syncWorkspaceUpdation = inngest.createFunction({ id: "update-workspace-from-clerk" }, { event: "clerk/organization.updated" }, async ({ event }) => {
     const { data } = event;
+    const updateData = {
+        name: data.name,
+        image_url: data.image_url,
+    };
+    if (data.slug) {
+        updateData.slug = data.slug;
+    }
     await prisma.workspace.update({
         where: {
             id: data.id,
         },
-        data: {
-            name: data.name,
-            slug: data.slug,
-            image_url: data.image_url,
-        },
+        data: updateData,
     });
 });
 

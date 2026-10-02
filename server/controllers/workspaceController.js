@@ -43,7 +43,72 @@ export const getUserWorkspaces = async (req, res) => {
             }
         }
 
-        // 2. Get workspaces for user
+        // 2. Sync organizations from Clerk in case webhook didn't fire (e.g. local dev)
+        try {
+            const orgMemberships = await clerkClient.users.getOrganizationMembershipList({ userId });
+            const clerkOrgs = orgMemberships?.data || orgMemberships || [];
+
+            for (const mem of clerkOrgs) {
+                const org = mem.organization;
+                if (!org) continue;
+
+                const baseSlug = (org.slug || org.name || "workspace")
+                    .toLowerCase()
+                    .trim()
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .replace(/^-|-$/g, '') || `ws-${org.id}`;
+
+                const existingWs = await prisma.workspace.findUnique({
+                    where: { id: org.id }
+                });
+
+                if (!existingWs) {
+                    let uniqueSlug = baseSlug;
+                    const slugExists = await prisma.workspace.findUnique({ where: { slug: uniqueSlug } });
+                    if (slugExists) {
+                        uniqueSlug = `${baseSlug}-${org.id.slice(-4)}`;
+                    }
+
+                    await prisma.workspace.create({
+                        data: {
+                            id: org.id,
+                            name: org.name,
+                            slug: uniqueSlug,
+                            ownerId: org.createdBy || userId,
+                            image_url: org.imageUrl || "",
+                            members: {
+                                create: {
+                                    userId: userId,
+                                    role: mem.role === "org:admin" ? "ADMIN" : "MEMBER"
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    const isMember = await prisma.workspaceMember.findUnique({
+                        where: {
+                            userId_workspaceId: {
+                                userId: userId,
+                                workspaceId: org.id
+                            }
+                        }
+                    });
+                    if (!isMember) {
+                        await prisma.workspaceMember.create({
+                            data: {
+                                userId: userId,
+                                workspaceId: org.id,
+                                role: mem.role === "org:admin" ? "ADMIN" : "MEMBER"
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (syncErr) {
+            console.log("Clerk org sync notice:", syncErr.message);
+        }
+
+        // 3. Get workspaces for user
         let workspaces = await prisma.workspace.findMany({
             where: {
                 members: { some: { userId: userId } }
