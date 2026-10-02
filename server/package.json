@@ -1,0 +1,33 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "postinstall": "npx prisma generate",
+    "start": "prisma generate && node server.js",
+    "server": "nodemon server.js",
+    "test": "node test_api_suite.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "dependencies": {
+    "@clerk/express": "^1.7.26",
+    "@neondatabase/serverless": "^1.0.1",
+    "@prisma/adapter-neon": "^6.15.0",
+    "@prisma/client": "^6.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "inngest": "^3.44.2",
+    "multer": "^2.0.2",
+    "nodemailer": "^10.0.13",
+    "prisma": "^5.22.0",
+    "ws": "^8.18.3"
+  }
+}
