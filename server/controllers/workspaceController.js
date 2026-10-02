@@ -1,35 +1,39 @@
 import prisma from "../configs/prisma.js";
 import { clerkClient } from "@clerk/express";
 
-// Get all workspaces for user
-export const getUserWorkspaces = async (req, res) => {
-    try {
-        const { userId } = await req.auth();
-        if (!userId) {
-            return res.status(401).json({ message: "Unauthorized" });
-        }
+// Helper to ensure user profile is in sync with Clerk and handle any email uniqueness conflicts
+const syncUserWithClerk = async (userId) => {
+    let user = await prisma.user.findUnique({ where: { id: userId } });
+    const needsSync = !user || user.name === "User" || user.email.includes("@clerk.user") || !user.image;
 
-        // 1. Ensure user exists in local database
-        let user = await prisma.user.findUnique({
-            where: { id: userId }
-        });
+    if (needsSync) {
+        try {
+            const clerkUser = await clerkClient.users.getUser(userId);
+            const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
+            const firstName = clerkUser?.firstName || "";
+            const lastName = clerkUser?.lastName || "";
+            const name = (firstName + " " + lastName).trim() || clerkUser?.username || "User";
+            const image = clerkUser?.imageUrl || "";
 
-        if (!user) {
-            try {
-                const clerkUser = await clerkClient.users.getUser(userId);
-                const email = clerkUser?.emailAddresses?.[0]?.emailAddress || `${userId}@example.com`;
-                const firstName = clerkUser?.firstName || "";
-                const lastName = clerkUser?.lastName || "";
-                const name = (firstName + " " + lastName).trim() || "User";
-                const image = clerkUser?.imageUrl || "";
+            if (email) {
+                // If this email is held by an older/stale DB user (e.g. deleted Clerk account), release it
+                const existingUser = await prisma.user.findUnique({ where: { email } });
+                if (existingUser && existingUser.id !== userId) {
+                    await prisma.user.update({
+                        where: { id: existingUser.id },
+                        data: { email: `${existingUser.id}_archived@clerk.user` }
+                    });
+                }
 
                 user = await prisma.user.upsert({
                     where: { id: userId },
                     update: { email, name, image },
                     create: { id: userId, email, name, image }
                 });
-            } catch (clerkErr) {
-                console.log("Could not fetch Clerk user details, creating fallback user:", clerkErr.message);
+            }
+        } catch (clerkErr) {
+            console.log("Could not fetch Clerk user details:", clerkErr.message);
+            if (!user) {
                 user = await prisma.user.upsert({
                     where: { id: userId },
                     update: {},
@@ -42,6 +46,20 @@ export const getUserWorkspaces = async (req, res) => {
                 });
             }
         }
+    }
+    return user;
+};
+
+// Get all workspaces for user
+export const getUserWorkspaces = async (req, res) => {
+    try {
+        const { userId } = await req.auth();
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        // 1. Ensure user exists in local database and profile is fresh
+        await syncUserWithClerk(userId);
 
         // 2. Sync organizations from Clerk in case webhook didn't fire (e.g. local dev)
         try {
@@ -243,30 +261,8 @@ export const createWorkspace = async (req, res) => {
             }
         }
 
-        // Ensure user exists in database
-        let user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) {
-            try {
-                const clerkUser = await clerkClient.users.getUser(userId);
-                const email = clerkUser?.emailAddresses?.[0]?.emailAddress || `${userId}@example.com`;
-                const firstName = clerkUser?.firstName || "";
-                const lastName = clerkUser?.lastName || "";
-                const userName = (firstName + " " + lastName).trim() || "User";
-                const userImg = clerkUser?.imageUrl || "";
-
-                user = await prisma.user.upsert({
-                    where: { id: userId },
-                    update: { email, name: userName, image: userImg },
-                    create: { id: userId, email, name: userName, image: userImg }
-                });
-            } catch (e) {
-                user = await prisma.user.upsert({
-                    where: { id: userId },
-                    update: {},
-                    create: { id: userId, email: `${userId}@clerk.user`, name: "User", image: "" }
-                });
-            }
-        }
+        // Ensure user exists in database and profile is fresh
+        await syncUserWithClerk(userId);
 
         const workspace = await prisma.workspace.create({
             data: {
