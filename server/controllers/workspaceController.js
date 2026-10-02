@@ -233,6 +233,9 @@ export const createWorkspace = async (req, res) => {
             return res.status(400).json({ message: "Workspace name is required" });
         }
 
+        // Ensure user exists in database and profile is fresh
+        const user = await syncUserWithClerk(userId);
+
         // Generate or validate slug
         const baseSlug = (slug || name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `workspace-${Date.now()}`;
         let workspaceSlug = baseSlug;
@@ -260,9 +263,6 @@ export const createWorkspace = async (req, res) => {
                 workspaceId = `ws_${Date.now()}`;
             }
         }
-
-        // Ensure user exists in database and profile is fresh
-        await syncUserWithClerk(userId);
 
         const workspace = await prisma.workspace.create({
             data: {

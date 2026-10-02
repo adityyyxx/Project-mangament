@@ -39,7 +39,24 @@ const Layout = () => {
         try {
             setIsCreatingFirstWs(true);
             toast.loading("Setting up your workspace...");
-            const token = await getToken();
+            
+            let token = null;
+            try {
+                token = await getToken({ skipCache: true });
+            } catch (tErr) {
+                token = await getToken().catch(() => null);
+            }
+            if (!token) {
+                token = await getToken().catch(() => null);
+            }
+
+            if (!token) {
+                toast.dismissAll();
+                toast.error("Session expired or invalid. Please sign out and sign back in.");
+                setIsCreatingFirstWs(false);
+                return;
+            }
+
             const { data } = await api.post(
                 "/api/workspaces",
                 { name: firstWorkspaceName.trim() },
@@ -52,7 +69,12 @@ const Layout = () => {
             toast.success("Workspace created! Welcome to your dashboard.");
         } catch (err) {
             toast.dismissAll();
-            toast.error(err?.response?.data?.message || err.message || "Failed to create workspace");
+            const errMsg = err?.response?.data?.message || err.message || "Failed to create workspace";
+            if (err?.response?.status === 401 || errMsg === "Unauthorized") {
+                toast.error("Session expired or unauthorized. Please sign out and sign in again.");
+            } else {
+                toast.error(errMsg);
+            }
         } finally {
             setIsCreatingFirstWs(false);
         }

@@ -43,7 +43,23 @@ const CreateWorkspaceDialog = ({ isDialogOpen, setIsDialogOpen }) => {
         try {
             setIsSubmitting(true);
             toast.loading("Creating workspace...");
-            const token = await getToken();
+            
+            let token = null;
+            try {
+                token = await getToken({ skipCache: true });
+            } catch (tErr) {
+                token = await getToken().catch(() => null);
+            }
+            if (!token) {
+                token = await getToken().catch(() => null);
+            }
+
+            if (!token) {
+                toast.dismissAll();
+                toast.error("Session expired or invalid. Please sign out and sign back in.");
+                setIsSubmitting(false);
+                return;
+            }
 
             const { data } = await api.post(
                 "/api/workspaces",
@@ -74,7 +90,12 @@ const CreateWorkspaceDialog = ({ isDialogOpen, setIsDialogOpen }) => {
             setIsDialogOpen(false);
         } catch (error) {
             toast.dismissAll();
-            toast.error(error?.response?.data?.message || error.message || "Failed to create workspace");
+            const errMsg = error?.response?.data?.message || error.message || "Failed to create workspace";
+            if (error?.response?.status === 401 || errMsg === "Unauthorized") {
+                toast.error("Session expired or unauthorized. Please sign out and sign in again.");
+            } else {
+                toast.error(errMsg);
+            }
         } finally {
             setIsSubmitting(false);
         }
